@@ -46,17 +46,21 @@ export const SeatGrid: React.FC = () => {
     const base =
       'relative flex items-center justify-center rounded-t-lg text-[11px] font-mono transition-all duration-150 select-none';
 
+
     if (seat.status === 'booked') {
       return `${base} bg-white/5 border border-white/10 text-white/20 cursor-not-allowed pointer-events-none`;
+    }
+
+    // Let the current user's selected seat remain visibly selected,
+    // even when Django reports its database status as "held".
+    if (isSelected) {
+      return `${base} bg-[#FFD900] text-[#080E09] font-bold shadow-glow-yellow scale-105 z-10`;
     }
 
     if (seat.status === 'held') {
       return `${base} bg-[rgba(255,252,114,0.15)] border border-[#FFFC72]/60 text-[#FFFC72] animate-pulse cursor-not-allowed`;
     }
 
-    if (isSelected) {
-      return `${base} bg-[#FFD900] text-[#080E09] font-bold shadow-glow-yellow scale-105 z-10`;
-    }
 
     if (seat.tier === 'vip' || seat.tier === 'premium') {
       return `${base} bg-[#080E09] border border-[#648E37] text-[#648E37] hover:bg-[#648E37] hover:text-[#080E09] hover:scale-105 cursor-pointer`;
@@ -204,7 +208,10 @@ export const SeatGrid: React.FC = () => {
                             <button
                               key={seat.id}
                               onClick={() => toggleSeatSelection(seat)}
-                              disabled={seat.status === 'booked' || seat.status === 'held'}
+                              disabled={
+                                  seat.status === 'booked' ||
+                                  (seat.status === 'held' && !isSelected)
+                              }
                               className={`${seatW} ${getSeatClass(seat, isSelected)}`}
                               title={`Seat ${seat.id} - ${seat.tier.toUpperCase()} - ₹${seat.price} (${seat.status})`}
                             >

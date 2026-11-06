@@ -1,6 +1,0 @@
-{
-  "name": "ClaimMyPass",
-  "description": "Cinema ticketing platform featuring real-time seat locks, dynamic auditorium layouts, concession add-ons, and verifiable digital passes.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

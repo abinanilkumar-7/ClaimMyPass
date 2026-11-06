@@ -1,0 +1,44 @@
+
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div id="content-main">
+    <p>
+        Generate seats for
+        <strong>{{ screen.theatre }} — {{ screen.name }}</strong>.
+    </p>
+
+    <p>
+        Existing seat positions will be preserved. Only missing positions
+        will be created.
+    </p>
+
+    <form method="post">
+        {% csrf_token %}
+
+        {{ form.non_field_errors }}
+
+        <fieldset class="module aligned">
+            {% for field in form %}
+                <div class="form-row">
+                    <div>
+                        {{ field.errors }}
+                        {{ field.label_tag }}
+                        {{ field }}
+                        {% if field.help_text %}
+                            <div class="help">{{ field.help_text }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </fieldset>
+
+        <div class="submit-row">
+            <input type="submit" value="Generate seats" class="default">
+            <a href="{% url 'admin:movies_screen_changelist' %}">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

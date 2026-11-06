@@ -14,7 +14,7 @@
 
   --font-display: 'Outfit', system-ui, -apple-system, sans-serif;
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-mono: 'Josefin Sans', monospace;
 }
 
 body {
@@ -54,4 +54,47 @@ h1, h2, h3, h4, .font-display {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #648E37;
+}
+
+
+/* ClaimMyPass: print only the digital ticket */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 0 !important;
+    height: auto !important;
+    background: #ffffff !important;
+  }
+
+  /* Hide the complete application. */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Reveal only the selected ticket and its contents. */
+  .ticket-print-root,
+  .ticket-print-root * {
+    visibility: visible !important;
+  }
+
+  .ticket-print-root {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }

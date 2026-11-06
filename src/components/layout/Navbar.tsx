@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
 import { useBooking } from '../../context/BookingContext';
-import { MapPin, Ticket, ChevronDown, Menu, X, Film, ShieldCheck } from 'lucide-react';
+import { logout } from '../../services/authApi';
+import {
+  MapPin,
+  Ticket,
+  ChevronDown,
+  Menu,
+  X,
+  Film,
+  UserRound,
+  LogIn,
+  LogOut,
+  UserPlus,
+} from 'lucide-react';
 
 interface NavbarProps {
   onOpenLegalTab?: (tab: 'privacy' | 'terms' | 'refund' | 'support') => void;
@@ -14,6 +26,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLegalTab }) => {
     setIsCityModalOpen,
     myPasses,
     returnToBrowse,
+    user,
+    setUser,
   } = useBooking();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -32,6 +46,23 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLegalTab }) => {
         const el = document.getElementById(targetElementId);
         el?.scrollIntoView({ behavior: 'smooth' });
       }, 50);
+    }
+  };
+
+  const openAuthPage = (view: 'sign-in' | 'sign-up') => {
+    setCurrentView(view);
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error){
+      console.error('Logout Request Failed:', error);
+    } finally{
+      setUser(null);
+      returnToBrowse();
+      setIsMobileMenuOpen(false);
     }
   };
 
@@ -88,6 +119,43 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLegalTab }) => {
           </span>
         </nav>
 
+        {/* Authentication actions — desktop */}
+        <div className="hidden md:flex items-center gap-2 shrink-0">
+          {user ? (
+            <>
+              <span className="flex items-center gap-1.5 text-sm text-zinc-300">
+                <UserRound className="h-4 w-4 text-[#648E37]" />
+                <span className="max-w-28 truncate">{user.name}</span>
+              </span>
+
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 rounded-md border border-[#7FA35C]/40 px-3 py-2 text-xs font-semibold text-zinc-200 hover:border-[#FFD900] hover:text-[#FFD900] transition-colors"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => openAuthPage('sign-in')}
+                className="flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold text-zinc-200 hover:text-[#FFD900] transition-colors"
+              >
+              <LogIn className="h-3.5 w-3.5" />
+              Sign In
+              </button>
+              <button
+              onClick={() => openAuthPage('sign-up')}
+              className="flex items-center gap-1.5 rounded-md bg-[#FFD900] px-3 py-2 text-xs font-bold text-[#080E09] hover:bg-[#FFFC72] transition-colors"
+              >
+              <UserPlus className="h-3.5 w-3.5" />
+              Create Account
+            </button>
+            </>
+          )}
+        </div>
+
         {/* Zone 3: 1 primary action & Mobile Menu toggle */}
         <div className="flex items-center gap-2.5 shrink-0">
           <button
@@ -116,6 +184,44 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLegalTab }) => {
       {isMobileMenuOpen && (
         <div className="md:hidden bg-[#080E09] border-b border-[#7FA35C]/30 px-4 py-4 space-y-3 animate-in slide-in-from-top-2 duration-150">
           <div className="flex flex-col space-y-2 text-sm font-medium">
+            <div className="mb-2 rounded-lg border border-[#7FA35C]/20 bg-[#101511] p-3">
+  {user ? (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2 min-w-0">
+        <UserRound className="h-5 w-5 shrink-0 text-[#FFD900]" />
+        <span className="truncate text-sm font-semibold text-white">
+          {user.name}
+        </span>
+      </div>
+
+      <button
+        onClick={handleLogout}
+        className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-zinc-300 hover:text-[#FFD900]"
+      >
+        <LogOut className="h-3.5 w-3.5" />
+        Sign Out
+      </button>
+    </div>
+  ) : (
+    <div className="grid grid-cols-2 gap-2">
+      <button
+        onClick={() => openAuthPage('sign-in')}
+        className="flex items-center justify-center gap-1.5 rounded-md border border-[#7FA35C]/40 px-2 py-2 text-sm text-white"
+      >
+        <LogIn className="h-4 w-4" />
+        Sign In
+      </button>
+
+      <button
+        onClick={() => openAuthPage('sign-up')}
+        className="flex items-center justify-center gap-1.5 rounded-md bg-[#FFD900] px-2 py-2 text-sm font-bold text-[#080E09]"
+      >
+        <UserPlus className="h-4 w-4" />
+        Sign Up
+      </button>
+    </div>
+  )}
+</div>
             <button
               onClick={() => handleNavClick('browse')}
               className={`flex items-center justify-between p-2.5 rounded-lg text-left transition-colors cursor-pointer ${

@@ -1,6 +1,29 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Movie, Theatre, Show, Seat, ConcessionItem, BookingPass } from '../types';
 import { CITIES, MOVIES, THEATRES, CONCESSIONS, getShowsForMovieAndTheatre, generateShowSeating } from '../data/mockData';
+import {
+  fetchSeats,
+  createSeatHold,
+  releaseSeatHold,
+} from '../services/seatApi';
+import { getStoredUser, type AuthUser } from '../services/authApi';
+import { fetchMyBookings } from "../services/paymentApi";
+
+
+type BookingView =
+  | 'browse'
+  | 'seats'
+  | 'concessions'
+  | 'payment'
+  | 'ticket-pass'
+  | 'my-passes'
+  | 'sign-in'
+  | 'sign-up'
+  | 'forgot-password'
+  | 'reset-password'
+  | 'staff-scanner'
+  | '404';
+
 
 interface ToastState {
   id: number;
@@ -10,10 +33,15 @@ interface ToastState {
 
 interface BookingContextType {
   // Navigation & modals
-  currentView: 'browse' | 'seats' | 'concessions' | 'payment' | 'ticket-pass' | 'my-passes' | '404';
-  setCurrentView: (view: 'browse' | 'seats' | 'concessions' | 'payment' | 'ticket-pass' | 'my-passes' | '404') => void;
+  currentView: BookingView;
+  setCurrentView: (view: BookingView) => void;
+
+  user: AuthUser | null;
+  setUser: React.Dispatch<React.SetStateAction<AuthUser | null>>;
+
   selectedCity: (typeof CITIES)[0];
   setSelectedCity: (city: (typeof CITIES)[0]) => void;
+
   isCityModalOpen: boolean;
   setIsCityModalOpen: (open: boolean) => void;
 
@@ -40,6 +68,7 @@ interface BookingContextType {
   toggleSeatSelection: (seat: Seat) => void;
   holdSecondsLeft: number;
   isHoldActive: boolean;
+  holdToken: string | null;
   releaseHold: () => void;
 
   // Concessions
@@ -58,6 +87,8 @@ interface BookingContextType {
   activePass: BookingPass | null;
   setActivePass: (pass: BookingPass | null) => void;
   myPasses: BookingPass[];
+  refreshMyPasses: () => Promise<BookingPass[]>;
+activateConfirmedPass: (pass: BookingPass) => void;
   completeBooking: (customer: { name: string; phone: string; email: string; paymentMethod: string }) => BookingPass;
   cancelBookingPass: (bookingId: string) => void;
 
@@ -79,9 +110,10 @@ export interface StoredHoldSession {
   theatreId: string;
   showId: string;
   seatIds: string[];
-  holdStartedAt: number; // absolute unix timestamp in ms
-  expiresAt: number; // absolute unix timestamp in ms (10-minute deadline)
-  view?: 'browse' | 'seats' | 'concessions' | 'payment' | 'ticket-pass' | 'my-passes' | '404';
+  holdToken?: string;
+  holdStartedAt: number;
+  expiresAt: number;
+  view?: BookingView;
   concessionsCart?: Record<string, number>;
   selectedDate?: string;
 }
@@ -133,11 +165,12 @@ function loadInitialHold(): {
 export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const initialHold = React.useMemo(() => loadInitialHold(), []);
 
-  const [currentView, setCurrentView] = useState<'browse' | 'seats' | 'concessions' | 'payment' | 'ticket-pass' | 'my-passes' | '404'>(
+  const [currentView, setCurrentView] = useState<BookingView>(
     initialHold.holdSession?.view || (initialHold.holdSession ? 'seats' : 'browse')
-  );
+    );
   const [selectedCity, setSelectedCity] = useState(CITIES[0]);
   const [isCityModalOpen, setIsCityModalOpen] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(() => getStoredUser());
 
   // Toast notification state
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -167,6 +200,7 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return [];
   });
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>(initialHold.holdSession?.seatIds || []);
+  const [holdToken, setHoldToken] = useState<string | null>(initialHold.holdSession?.holdToken ?? null);
   const [holdExpiryTimestamp, setHoldExpiryTimestamp] = useState<number | null>(
     initialHold.holdSession?.expiresAt || null
   );
@@ -182,58 +216,44 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [myPasses, setMyPasses] = useState<BookingPass[]>([]);
 
   // Initialize stored passes
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_PASSES_KEY);
-      if (stored) {
-        setMyPasses(JSON.parse(stored));
-      } else {
-        const defaultPass: BookingPass = {
-          bookingId: 'CMP-7829-4102',
-          referenceHash: 'SHA256-e9b41fa80c2f3491b2c451da',
-          movie: MOVIES[0],
-          theatre: THEATRES[0],
-          show: {
-            id: 'demo-show-01',
-            movieId: MOVIES[0].id,
-            theatreId: THEATRES[0].id,
-            screenName: 'AUDI 1 (IMAX Laser)',
-            format: 'IMAX Laser 3D',
-            date: new Date().toISOString().split('T')[0],
-            time: '06:45 PM',
-            basePrice: 420,
-            pricing: { standard: 420, premium: 580, vip: 880 },
-          },
-          seats: [
-            { id: 'H7', row: 'H', number: 7, tier: 'premium', price: 580, status: 'booked' },
-            { id: 'H8', row: 'H', number: 8, tier: 'premium', price: 580, status: 'booked' },
-          ],
-          concessions: [],
-          subtotalTickets: 1160,
-          subtotalConcessions: 0,
-          convenienceFee: 68,
-          taxes: 221,
-          totalPaid: 1449,
-          bookedAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-          paymentMethod: 'UPI (Google Pay)',
-          paymentId: 'pay_UPI_982401824',
-          customerName: 'Aarav Sharma',
-          customerPhone: '+91 98201 44521',
-          customerEmail: 'aarav.sharma@example.com',
-        };
-        setMyPasses([defaultPass]);
-        localStorage.setItem(LOCAL_STORAGE_PASSES_KEY, JSON.stringify([defaultPass]));
-      }
-    } catch {
-      // fallback
+  // Load confirmed bookings from Django.
+useEffect(() => {
+  let cancelled = false;
+
+  const loadPasses = async () => {
+    if (!user) {
+      setMyPasses([]);
+      setActivePass(null);
+      return;
     }
-  }, []);
+
+    try {
+      const passes = await fetchMyBookings();
+
+      if (!cancelled) {
+        setMyPasses(passes);
+      }
+    } catch (error) {
+      console.error("Failed to load confirmed bookings:", error);
+
+      if (!cancelled) {
+        setMyPasses([]);
+      }
+    }
+  };
+
+  void loadPasses();
+
+  return () => {
+    cancelled = true;
+  };
+}, [user]);
 
   // Helper to persist the active 10-minute hold session to sessionStorage
   const persistHoldToSession = (
     seatIdsToStore: string[],
     expiryMs: number,
-    viewOverride?: 'browse' | 'seats' | 'concessions' | 'payment' | 'ticket-pass' | 'my-passes' | '404',
+    viewOverride?: BookingView,
     cartOverride?: Record<string, number>,
     movieOverride?: Movie | null,
     theatreOverride?: Theatre | null,
@@ -256,6 +276,7 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         theatreId: activeTheatre?.id || '',
         showId: activeShow?.id || '',
         seatIds: seatIdsToStore,
+        holdToken: holdToken ?? undefined,
         holdStartedAt: expiryMs - HOLD_DURATION_SECONDS * 1000,
         expiresAt: expiryMs,
         view: viewOverride || currentView,
@@ -269,7 +290,7 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const handleSetCurrentView = (view: 'browse' | 'seats' | 'concessions' | 'payment' | 'ticket-pass' | 'my-passes' | '404') => {
+  const handleSetCurrentView = (view: BookingView) => {
     setCurrentView(view);
     if (isHoldActive && holdExpiryTimestamp && selectedSeatIds.length > 0) {
       persistHoldToSession(selectedSeatIds, holdExpiryTimestamp, view);
@@ -278,72 +299,254 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Save passes to localStorage whenever changed
   const savePasses = (passes: BookingPass[]) => {
-    setMyPasses(passes);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_PASSES_KEY, JSON.stringify(passes));
-    } catch {
-      // ignore
-    }
-  };
+  setMyPasses(passes);
+};
+
+const refreshMyPasses = async (): Promise<BookingPass[]> => {
+  const passes = await fetchMyBookings();
+  setMyPasses(passes);
+  return passes;
+};
+
+const activateConfirmedPass = (pass: BookingPass) => {
+  setMyPasses((previous) => [
+    pass,
+    ...previous.filter((item) => item.bookingId !== pass.bookingId),
+  ]);
+
+  setActivePass(pass);
+
+  // Clear local seat-selection and hold state.
+  setSelectedSeatIds([]);
+  setHoldToken(null);
+  setIsHoldActive(false);
+  setHoldExpiryTimestamp(null);
+  setHoldSecondsLeft(0);
+  setConcessionsCart({});
+
+  try {
+    sessionStorage.removeItem(SESSION_STORAGE_HOLD_KEY);
+    localStorage.removeItem(LOCAL_STORAGE_PASSES_KEY);
+  } catch {
+    // Ignore browser storage errors.
+  }
+
+  showToast(
+    `Payment verified. Your pass for ${pass.movie.title} is ready!`,
+    "success"
+  );
+
+  setCurrentView("ticket-pass");
+};
 
   // Generate seating grid when show changes
+
+  // Load database-backed seats for Django shows; retain mock seating for demo shows.
   useEffect(() => {
-    if (selectedShow) {
-      const generated = generateShowSeating(selectedShow.id, selectedShow.pricing);
-      setCurrentSeats(generated);
-    }
-  }, [selectedShow]);
+    let cancelled = false;
 
-  // Real-time timestamp-based hold countdown timer with tab-focus / reload resilience
-  useEffect(() => {
-    if (!isHoldActive || !holdExpiryTimestamp) return;
+    const loadSeats = async () => {
+      if (!selectedShow) {
+        setCurrentSeats([]);
+        return;
+      }
 
-    const tick = () => {
-      const now = Date.now();
-      const remainingMs = holdExpiryTimestamp - now;
-      const seconds = Math.max(0, Math.floor(remainingMs / 1000));
-      setHoldSecondsLeft(seconds);
+      if (!/^\d+$/.test(selectedShow.id)) {
+        setCurrentSeats(
+          generateShowSeating(selectedShow.id, selectedShow.pricing)
+        );
+        return;
+      }
 
-      if (seconds <= 0) {
-        // Hold expired!
-        setIsHoldActive(false);
-        setHoldExpiryTimestamp(null);
-        setSelectedSeatIds([]);
-        try {
-          sessionStorage.removeItem(SESSION_STORAGE_HOLD_KEY);
-        } catch {
-          // ignore
+      try {
+        const apiSeats = await fetchSeats(Number(selectedShow.id));
+        console.log("API seats received:", apiSeats.length, apiSeats);
+
+        if (cancelled) return;
+
+        const mappedSeats: Seat[] = apiSeats.map((seat) => ({
+          id: `${seat.row}${seat.number}`,
+          backendId: seat.id,
+          row: seat.row,
+          number: seat.number,
+          tier: seat.tier,
+          price: Number(seat.price),
+          status: seat.status,
+        }));
+        console.log("Mapped seats:", mappedSeats.length, mappedSeats);
+
+        setCurrentSeats(mappedSeats);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load seats:", error);
+          showToast("Unable to load seats. Please try again.", "error");
+          setCurrentSeats([]);
         }
-        if (selectedShow) {
-          setCurrentSeats(generateShowSeating(selectedShow.id, selectedShow.pricing));
-        }
-        showToast('Your 10-minute seat lock expired. Seats returned to inventory.', 'error');
       }
     };
 
-    tick();
-    const interval = setInterval(tick, 1000);
-
-    const handleSync = () => {
-      tick();
-    };
-
-    window.addEventListener('focus', handleSync);
-    document.addEventListener('visibilitychange', handleSync);
+    void loadSeats();
 
     return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', handleSync);
-      document.removeEventListener('visibilitychange', handleSync);
+      cancelled = true;
     };
-  }, [isHoldActive, holdExpiryTimestamp, selectedShow]);
+  }, [selectedShow]);
+
+
+  // Real-time timestamp-based hold countdown timer with tab-focus / reload resilience
+
+useEffect(() => {
+  if (!isHoldActive || !holdExpiryTimestamp) return;
+
+  let expired = false;
+
+  const tick = () => {
+    if (expired) return;
+
+    const now = Date.now();
+    const remainingMs = holdExpiryTimestamp - now;
+    const seconds = Math.max(0, Math.floor(remainingMs / 1000));
+
+    setHoldSecondsLeft(seconds);
+
+    if (seconds <= 0) {
+      // Prevent repeated expiry handling.
+      expired = true;
+
+      setIsHoldActive(false);
+      setHoldExpiryTimestamp(null);
+      setHoldSecondsLeft(0);
+      setSelectedSeatIds([]);
+      setHoldToken(null);
+
+      try {
+        sessionStorage.removeItem(SESSION_STORAGE_HOLD_KEY);
+      } catch {
+        // Ignore sessionStorage errors.
+      }
+
+      if (selectedShow) {
+        if (/^\d+$/.test(selectedShow.id)) {
+          // Django-backed show: fetch the real seat availability.
+          void fetchSeats(Number(selectedShow.id))
+            .then((apiSeats) => {
+              setCurrentSeats(
+                apiSeats.map((seat) => ({
+                  id: `${seat.row}${seat.number}`,
+                  backendId: seat.id,
+                  row: seat.row,
+                  number: seat.number,
+                  tier: seat.tier,
+                  price: Number(seat.price),
+                  status: seat.status,
+                }))
+              );
+            })
+            .catch((error) => {
+              console.error(
+                'Failed to refresh seats after hold expiry:',
+                error
+              );
+              showToast(
+                'Your seat lock expired. Refresh seat availability.',
+                'error'
+              );
+            });
+        } else {
+          // Demo show: use mock seating.
+          setCurrentSeats(
+            generateShowSeating(
+              selectedShow.id,
+              selectedShow.pricing
+            )
+          );
+        }
+      }
+
+      showToast(
+        'Your 10-minute seat lock expired. Seats returned to inventory.',
+        'error'
+      );
+    }
+  };
+
+  tick();
+
+  const interval = window.setInterval(tick, 1000);
+
+  const handleSync = () => {
+    tick();
+  };
+
+  window.addEventListener('focus', handleSync);
+  document.addEventListener('visibilitychange', handleSync);
+
+  return () => {
+    clearInterval(interval);
+    window.removeEventListener('focus', handleSync);
+    document.removeEventListener('visibilitychange', handleSync);
+  };
+}, [isHoldActive, holdExpiryTimestamp, selectedShow]);
+
 
   // Toggle seat selection with automatic session storage sync
-  const toggleSeatSelection = (seat: Seat) => {
-    if (seat.status === 'booked' || seat.status === 'held') return;
 
-    if (selectedSeatIds.includes(seat.id)) {
-      const updated = selectedSeatIds.filter((id) => id !== seat.id);
+const toggleSeatSelection = async (seat: Seat) => {
+  const isSelected = selectedSeatIds.includes(seat.id);
+
+  // Never allow selecting a booked seat or another user's held seat.
+  if (seat.status === 'booked') return;
+  if (seat.status === 'held' && !isSelected) return;
+
+  if (!isSelected && selectedSeatIds.length >= 8) {
+    showToast(
+      'Fair-usage policy: Maximum 8 seats per booking session.',
+      'error'
+    );
+    return;
+  }
+
+  const isDatabaseShow =
+    !!selectedShow && /^\d+$/.test(selectedShow.id);
+
+  console.log('Seat booking diagnostic:', {
+    movie: selectedMovie?.title,
+    showId: selectedShow?.id,
+    isDatabaseShow,
+    seatId: seat.id,
+    backendSeatId: seat.backendId,
+  });
+
+  const now = Date.now();
+  const existingExpiry =
+    isHoldActive && holdExpiryTimestamp && holdExpiryTimestamp > now
+      ? holdExpiryTimestamp
+      : now + HOLD_DURATION_SECONDS * 1000;
+
+  try {
+    let updated: string[];
+    let expiry = existingExpiry;
+
+    if (isSelected) {
+      updated = selectedSeatIds.filter((id) => id !== seat.id);
+
+      // Release this seat in Django.
+      if (isDatabaseShow && seat.backendId !== undefined) {
+        if (!holdToken) {
+          showToast(
+            'Your seat hold has expired or is unavailable. Please refresh the seats.',
+            'error'
+          );
+          return;
+        }
+
+        await releaseSeatHold(
+          Number(selectedShow!.id),
+          holdToken,
+          [seat.backendId]
+        );
+      }
+
       setSelectedSeatIds(updated);
       showToast(`Seat ${seat.id} released`, 'info');
 
@@ -351,50 +554,151 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setIsHoldActive(false);
         setHoldExpiryTimestamp(null);
         setHoldSecondsLeft(0);
+        setHoldToken(null);
+
         try {
           sessionStorage.removeItem(SESSION_STORAGE_HOLD_KEY);
         } catch {
-          // ignore
+          // Ignore session storage errors.
         }
       } else {
-        // Keep existing expiry timestamp for remainder of hold
-        const expiry = holdExpiryTimestamp || Date.now() + HOLD_DURATION_SECONDS * 1000;
+        setIsHoldActive(true);
+        setHoldExpiryTimestamp(expiry);
+        setHoldSecondsLeft(
+          Math.max(0, Math.floor((expiry - now) / 1000))
+        );
         persistHoldToSession(updated, expiry);
       }
-    } else {
-      if (selectedSeatIds.length >= 8) {
-        showToast('Fair-usage policy: Maximum 8 seats per booking session.', 'error');
+
+      return;
+    }
+
+    updated = [...selectedSeatIds, seat.id];
+
+    // Create or extend the real database hold.
+    if (isDatabaseShow) {
+      if (seat.backendId === undefined) {
+        showToast('This seat has no database ID. Please reload the seats.', 'error');
         return;
       }
-      const updated = [...selectedSeatIds, seat.id];
-      setSelectedSeatIds(updated);
-      showToast(`Seat ${seat.id} (${seat.tier.toUpperCase()}) locked for 10 minutes`, 'success');
 
-      const now = Date.now();
-      // Maintain uninterrupted hold expiry if hold is already active, or establish 10-minute hold timestamp
-      const expiry = isHoldActive && holdExpiryTimestamp && holdExpiryTimestamp > now
-        ? holdExpiryTimestamp
-        : now + HOLD_DURATION_SECONDS * 1000;
+      const backendSeatIds = currentSeats
+        .filter(
+          (currentSeat) =>
+            updated.includes(currentSeat.id) &&
+            currentSeat.backendId !== undefined
+        )
+        .map((currentSeat) => currentSeat.backendId!);
 
-      setIsHoldActive(true);
-      setHoldExpiryTimestamp(expiry);
-      setHoldSecondsLeft(Math.max(0, Math.floor((expiry - now) / 1000)));
+      if (backendSeatIds.length !== updated.length) {
+        showToast('Some selected seats could not be identified. Please reload the seats.', 'error');
+        return;
+      }
 
-      persistHoldToSession(updated, expiry);
+      const result = await createSeatHold(
+        Number(selectedShow!.id),
+        backendSeatIds,
+        holdToken ?? undefined
+      );
+
+      setHoldToken(result.hold_token);
+      expiry = new Date(result.expires_at).getTime();
     }
-  };
 
-  const releaseHold = () => {
-    setSelectedSeatIds([]);
-    setIsHoldActive(false);
-    setHoldExpiryTimestamp(null);
-    setHoldSecondsLeft(0);
+    setSelectedSeatIds(updated);
+    setIsHoldActive(true);
+    setHoldExpiryTimestamp(expiry);
+    setHoldSecondsLeft(
+      Math.max(0, Math.floor((expiry - Date.now()) / 1000))
+    );
+
+    persistHoldToSession(updated, expiry);
+
+    showToast(
+      `Seat ${seat.id} (${seat.tier.toUpperCase()}) held for 10 minutes`,
+      'success'
+    );
+  } catch (error) {
+    console.error('Seat hold operation failed:', error);
+
+    showToast(
+      error instanceof Error
+        ? error.message
+        : 'Unable to update your seat hold. Please try again.',
+      'error'
+    );
+  }
+};
+
+
+  const releaseHold = async () => {
+  const activeShowId = selectedShow?.id;
+  const activeToken = holdToken;
+
+  const backendSeatIds = currentSeats
+    .filter(
+      (seat) =>
+        selectedSeatIds.includes(seat.id) &&
+        seat.backendId !== undefined
+    )
+    .map((seat) => seat.backendId!);
+
+  // Clear the local state immediately.
+  setSelectedSeatIds([]);
+  setIsHoldActive(false);
+  setHoldExpiryTimestamp(null);
+  setHoldSecondsLeft(0);
+  setHoldToken(null);
+
+  try {
+    sessionStorage.removeItem(SESSION_STORAGE_HOLD_KEY);
+  } catch {
+    // Ignore session storage errors.
+  }
+
+  // Release the real Django hold when this is a database-backed show.
+  if (
+    activeShowId &&
+    /^\d+$/.test(activeShowId) &&
+    activeToken &&
+    backendSeatIds.length > 0
+  ) {
     try {
-      sessionStorage.removeItem(SESSION_STORAGE_HOLD_KEY);
-    } catch {
-      // ignore
+      await releaseSeatHold(
+        Number(activeShowId),
+        activeToken,
+        backendSeatIds
+      );
+    } catch (error) {
+      console.error('Failed to release backend seat hold:', error);
+      showToast(
+        'Could not confirm seat release with the server. Refresh availability before booking again.',
+        'error'
+      );
     }
-  };
+  }
+
+  // Refresh inventory so the UI reflects the server.
+  if (activeShowId && /^\d+$/.test(activeShowId)) {
+    try {
+      const apiSeats = await fetchSeats(Number(activeShowId));
+
+      setCurrentSeats(
+        apiSeats.map((seat) => ({
+          id: `${seat.row}${seat.number}`,
+          backendId: seat.id,
+          row: seat.row,
+          number: seat.number,
+          tier: seat.tier,
+          price: Number(seat.price),
+          status: seat.status,
+        }))
+      );
+    } catch (error) {
+      console.error('Failed to refresh seat availability:', error);
+    }
+  }
+};
 
   // Concessions
   const updateConcessionQty = (itemId: string, delta: number) => {
@@ -435,22 +739,48 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const grandTotal = subtotalTickets + subtotalConcessions + convenienceFee + taxes;
 
   // Start booking flow
-  const startSeatBooking = (movie: Movie, theatre?: Theatre, show?: Show) => {
-    setSelectedMovie(movie);
-    const chosenTheatre = theatre || THEATRES[0];
-    setSelectedTheatre(chosenTheatre);
 
-    const availableShows = getShowsForMovieAndTheatre(movie.id, chosenTheatre.id, selectedDate);
-    const chosenShow = show || availableShows[0];
-    setSelectedShow(chosenShow);
+  // Start booking flow
 
-    if (selectedShow && chosenShow && selectedShow.id !== chosenShow.id && isHoldActive) {
-      releaseHold();
-    }
+const startSeatBooking = (
+  movie: Movie,
+  theatre?: Theatre,
+  show?: Show
+) => {
+  const chosenTheatre = theatre || THEATRES[0];
 
-    setIsMovieDetailOpen(false);
-    handleSetCurrentView('seats');
-  };
+  console.log("startSeatBooking called:", {
+    movie: movie.title,
+    showId: show?.id,
+  });
+
+  // Preserve the supplied Django show; use mock data only for demo flows.
+  const chosenShow =
+    show ||
+    getShowsForMovieAndTheatre(
+      movie.id,
+      chosenTheatre.id,
+      selectedDate
+    )[0];
+
+  console.log("chosenShow:", chosenShow);
+
+  // Release the previous hold if switching to another show.
+  if (
+    selectedShow &&
+    chosenShow &&
+    selectedShow.id !== chosenShow.id &&
+    isHoldActive
+  ) {
+    releaseHold();
+  }
+
+  setSelectedMovie(movie);
+  setSelectedTheatre(chosenTheatre);
+  setSelectedShow(chosenShow || null);
+  setIsMovieDetailOpen(false);
+  handleSetCurrentView("seats");
+};
 
   const proceedToConcessions = () => {
     if (selectedSeatIds.length === 0) return;
@@ -526,6 +856,8 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         currentView,
         setCurrentView: handleSetCurrentView,
+        user,
+        setUser,
         selectedCity,
         setSelectedCity,
         isCityModalOpen,
@@ -548,6 +880,7 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         toggleSeatSelection,
         holdSecondsLeft,
         isHoldActive,
+        holdToken,
         releaseHold,
         concessionsCart,
         updateConcessionQty,
@@ -560,6 +893,8 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         activePass,
         setActivePass,
         myPasses,
+        refreshMyPasses,
+        activateConfirmedPass,
         completeBooking,
         cancelBookingPass,
         startSeatBooking,

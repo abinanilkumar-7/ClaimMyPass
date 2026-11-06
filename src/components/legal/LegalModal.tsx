@@ -258,10 +258,10 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                   <div>
                     <span className="text-xs text-zinc-400 block">Toll-Free Phone Concierge</span>
                     <a
-                      href="tel:+918045681200"
+                      href="tel:+917418987607"
                       className="font-mono text-sm font-bold text-[#FFD900] hover:text-[#FFFC72] underline transition-colors"
                     >
-                      +91 80 4568 1200
+                      +91 741 898 7607
                     </a>
                   </div>
                 </div>
@@ -273,7 +273,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({
                   <div>
                     <span className="text-xs text-zinc-400 block">Direct Ticket Inquiries & Escalations</span>
                     <a
-                      href="mailto:support@claimmypass.com"
+                      href="mailto:abinanilkumar26@gmail.com"
                       className="font-mono text-sm font-bold text-[#648E37] hover:text-[#7FA35C] underline transition-colors"
                     >
                       support@claimmypass.com

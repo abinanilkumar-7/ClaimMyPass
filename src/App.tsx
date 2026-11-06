@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { BookingProvider, useBooking } from './context/BookingContext';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { HeroShowcase } from './components/movies/HeroShowcase';
+import { SignInPage } from './components/auth/SignInPage';
+import { SignUpPage } from './components/auth/SignUpPage';
+import { ForgotPasswordPage } from './components/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 import { MovieCard } from './components/movies/MovieCard';
 import { MovieFilterBar } from './components/movies/MovieFilterBar';
 import { MovieDetailModal } from './components/movies/MovieDetailModal';
@@ -18,21 +22,74 @@ import { LegalModal, LegalTab } from './components/legal/LegalModal';
 import { CookieConsentBanner } from './components/legal/CookieConsentBanner';
 import { Custom404View } from './components/common/Custom404View';
 import { ToastContainer } from './components/common/ToastContainer';
-import { MOVIES } from './data/mockData';
+import { MOVIES as FALLBACK_MOVIES } from './data/mockData';
+
 import { Film } from 'lucide-react';
+import { fetchMovies } from './services/movieApi';
+const StaffScanner = React.lazy(() =>
+  import("./components/staff/StaffScanner").then(
+    ({ StaffScanner }) => ({
+      default: StaffScanner,
+    })
+  )
+);
 
 const MainContent: React.FC = () => {
-  const { currentView, selectedDate, setSelectedDate, setCurrentView } = useBooking();
+  const { currentView, selectedDate, setSelectedDate, setCurrentView, setUser, } = useBooking();
   const [selectedGenre, setSelectedGenre] = useState('');
   const [selectedFormat, setSelectedFormat] = useState('');
   const [activeLegalTab, setActiveLegalTab] = useState<LegalTab | null>(null);
 
+const [movies, setMovies] = useState(FALLBACK_MOVIES);
+const [moviesLoading, setMoviesLoading] = useState(true);
+const [moviesError, setMoviesError] = useState('');
+
+useEffect(() => {
+  const path = window.location.pathname;
+
+  if (path === '/reset-password') {
+    setCurrentView('reset-password');
+  } else if (path === '/staff/scanner') {
+    setCurrentView('staff-scanner');
+  }
+}, [setCurrentView]);
+
+useEffect(() => {
+  let cancelled = false;
+
+  fetchMovies()
+    .then((data) => {
+      if (!cancelled) {
+        setMovies(data);
+        setMoviesError('');
+      }
+    })
+    .catch((error: unknown) => {
+      if (!cancelled) {
+        setMoviesError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to load movies from the server.'
+        );
+      }
+    })
+    .finally(() => {
+      if (!cancelled) setMoviesLoading(false);
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
+
   // Filter movies based on user selections
-  const filteredMovies = MOVIES.filter((movie) => {
+  const filteredMovies = movies.filter((movie) => {
     if (selectedGenre && !movie.genre.includes(selectedGenre)) return false;
     if (selectedFormat && !movie.formats.includes(selectedFormat)) return false;
     return true;
   });
+  const featuredMovie = movies.find((movie) => movie.isFeatured) ?? null;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#101511] text-zinc-100 selection:bg-[#FFD900] selection:text-[#080E09] overflow-x-hidden">
@@ -47,10 +104,30 @@ const MainContent: React.FC = () => {
 
       {/* 4. Dynamic Router / View Switcher */}
       <main className="flex-1">
+        {currentView === "staff-scanner" && (
+  <Suspense
+    fallback={
+      <div className="min-h-screen bg-[#101511] flex items-center justify-center text-[#FFD900]">
+        Loading staff scanner...
+      </div>
+    }
+  >
+    <StaffScanner
+      onBack={() => {
+        window.history.replaceState({}, "", "/");
+        setCurrentView("browse");
+      }}
+    />
+  </Suspense>
+)}
         {currentView === 'browse' && (
           <div>
             {/* Cinematic Hero */}
-            <HeroShowcase />
+            <HeroShowcase
+              movie={featuredMovie}
+              loading={moviesLoading}
+              error={moviesError}
+            />
 
             {/* Catalog Discovery Section */}
             <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
@@ -108,6 +185,47 @@ const MainContent: React.FC = () => {
             </section>
           </div>
         )}
+        {currentView === 'sign-in' && (
+  <SignInPage
+    onSuccess={(authenticatedUser) => {
+      setUser(authenticatedUser);
+      setCurrentView(
+        window.location.pathname === "/staff/scanner"
+        ? "staff-scanner"
+        : "browse"
+      );
+    }}
+    onSwitchToSignUp={() => setCurrentView('sign-up')}
+    onBack={() => setCurrentView('browse')}
+    onForgotPassword={() => setCurrentView('forgot-password')}
+  />
+)}
+
+{currentView === 'sign-up' && (
+  <SignUpPage
+    onSuccess={(authenticatedUser) => {
+      setUser(authenticatedUser);
+      setCurrentView('browse');
+    }}
+    onSwitchToSignIn={() => setCurrentView('sign-in')}
+    onBack={() => setCurrentView('browse')}
+  />
+)}
+
+{currentView === 'forgot-password' && (
+  <ForgotPasswordPage
+    onBack={() => setCurrentView('sign-in')}
+  />
+)}
+
+{currentView === 'reset-password' && (
+  <ResetPasswordPage
+    onBackToSignIn={() => {
+      window.history.replaceState({}, '', '/');
+      setCurrentView('sign-in');
+    }}
+  />
+)}
 
         {currentView === 'seats' && <SeatGrid />}
 

@@ -66,14 +66,14 @@ export const Footer: React.FC<FooterProps> = ({ onOpenLegalTab }) => {
           <div className="flex flex-wrap items-center gap-6">
             <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[11px]">Direct Support:</span>
             <a
-              href="tel:+918045681200"
+              href="tel:+917418987607"
               className="flex items-center gap-1.5 text-zinc-300 hover:text-[#FFD900] transition-colors"
             >
               <Phone className="w-3.5 h-3.5 text-[#648E37]" />
-              <span>+91 80 4568 1200</span>
+              <span>+91 741 898 7607</span>
             </a>
             <a
-              href="mailto:support@claimmypass.com"
+              href="mailto:abinanilkumar321@gmail.com"
               className="flex items-center gap-1.5 text-zinc-300 hover:text-[#FFFC72] transition-colors"
             >
               <Mail className="w-3.5 h-3.5 text-[#648E37]" />

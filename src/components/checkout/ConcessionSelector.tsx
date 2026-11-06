@@ -4,6 +4,26 @@ import { CONCESSIONS } from '../../data/mockData';
 import { ConcessionItem } from '../../types';
 import { ArrowLeft, Plus, Minus, Utensils, Check, ChevronRight } from 'lucide-react';
 
+const CONCESSION_IMAGES: Record<string, string> = {
+  "fnb-popcorn-truffle":
+    "https://images.pexels.com/photos/7234229/pexels-photo-7234229.jpeg?auto=compress&dpr=1&h=750&w=1260",
+
+  "fnb-popcorn-caramel":
+    "https://images.pexels.com/photos/30910227/pexels-photo-30910227/free-photo-of-bowl-of-caramel-popcorn-with-chocolate-drizzle.jpeg?auto=compress&dpr=1&h=750&w=1260",
+
+  "fnb-nacho-supremo":
+    "https://images.pexels.com/photos/35628195/pexels-photo-35628195/free-photo-of-delicious-nachos-with-jalapenos-and-cheese.jpeg?auto=compress&dpr=1&h=750&w=1260",
+
+  "fnb-combo-couples":
+    "https://images.pexels.com/photos/5332073/pexels-photo-5332073.jpeg?auto=compress&dpr=1&h=750&w=1260",
+
+  "fnb-coldbrew-latte":
+    "https://images.pexels.com/photos/38860355/pexels-photo-38860355/free-photo-of-iced-cold-brew-coffee-on-marble-table-setting.jpeg?auto=compress&dpr=1&h=750&w=1260",
+
+  "fnb-craft-soda":
+    "https://images.pexels.com/photos/29002944/pexels-photo-29002944/free-photo-of-refreshing-citrus-mocktail-with-mint-garnish.jpeg?auto=compress&dpr=1&h=750&w=1260",
+};
+
 export const ConcessionSelector: React.FC = () => {
   const {
     concessionsCart,
@@ -16,6 +36,7 @@ export const ConcessionSelector: React.FC = () => {
   } = useBooking();
 
   const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const categories = ['All', 'Popcorn', 'Combos', 'Snacks', 'Beverages'];
 
   const filteredItems = activeCategory === 'All'
@@ -74,77 +95,132 @@ export const ConcessionSelector: React.FC = () => {
         </div>
 
         {/* Concession Items Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredItems.map((item) => {
-            const qty = concessionsCart[item.id] || 0;
-            return (
-              <div
-                key={item.id}
-                className="flex flex-col justify-between bg-[#080E09] border border-[#7FA35C]/20 rounded-xl p-5 hover:border-[#648E37] transition-all"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="text-3xl p-2 rounded-lg bg-[#101511] border border-white/5">
-                      {item.imageEmoji}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {item.isVeg && (
-                        <span className="w-3.5 h-3.5 border border-[#648E37] rounded-sm flex items-center justify-center p-0.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#648E37]" />
-                        </span>
-                      )}
-                      <span className="text-xs font-mono font-bold text-[#FFFC72] tabular-nums">
-                        ₹{item.price}
-                      </span>
-                    </div>
-                  </div>
+        {/* Concession Items Grid */}
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+  {filteredItems.map((item) => {
+    const qty = concessionsCart[item.id] || 0;
+    const imageUrl = CONCESSION_IMAGES[item.id];
+    const imageFailed = failedImages[item.id];
 
-                  <h3 className="text-sm font-bold text-white mb-1">{item.name}</h3>
-                  <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">
-                    {item.description}
-                  </p>
-                </div>
+    return (
+      <div
+        key={item.id}
+        className="group flex flex-col overflow-hidden bg-[#080E09] border border-[#7FA35C]/20 rounded-2xl hover:border-[#FFD900]/60 hover:shadow-[0_8px_30px_rgba(255,217,0,0.07)] transition-all duration-300"
+      >
+        {/* Product Image */}
+        <div className="relative aspect-[16/10] overflow-hidden bg-[#101511]">
 
-                {/* Add / Stepper Area */}
-                <div className="pt-4 mt-4 border-t border-white/5 flex items-center justify-between">
-                  <span className="text-[11px] text-zinc-500 uppercase font-mono">
-                    {item.category}
-                  </span>
+          {!imageFailed && imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={item.name}
+              loading="lazy"
+              decoding="async"
+              onError={() =>
+                setFailedImages((previous) => ({
+                  ...previous,
+                  [item.id]: true,
+                }))
+              }
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center text-[#648E37] gap-2">
+              <Utensils className="w-10 h-10 opacity-60" />
+              <span className="text-[10px] uppercase tracking-widest text-zinc-500">
+                Image unavailable
+              </span>
+            </div>
+          )}
 
-                  {qty === 0 ? (
-                    <button
-                      onClick={() => updateConcessionQty(item.id, 1)}
-                      className="px-3.5 py-1.5 rounded-md text-xs font-bold bg-[#101511] text-[#FFD900] border border-[#FFD900]/60 hover:bg-[#FFD900] hover:text-[#080E09] transition-all flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add</span>
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-2 bg-[#101511] border border-[#FFD900] rounded-md px-2 py-1">
-                      <button
-                        onClick={() => updateConcessionQty(item.id, -1)}
-                        className="p-0.5 text-zinc-300 hover:text-white"
-                        aria-label="Decrease quantity"
-                      >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="text-xs font-bold font-mono text-[#FFD900] px-2 tabular-nums">
-                        {qty}
-                      </span>
-                      <button
-                        onClick={() => updateConcessionQty(item.id, 1)}
-                        className="p-0.5 text-zinc-300 hover:text-white"
-                        aria-label="Increase quantity"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          {/* Image Gradient */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#080E09]/80 via-transparent to-transparent pointer-events-none" />
+
+          {/* Category */}
+          <span className="absolute bottom-3 left-3 px-2.5 py-1 rounded-md bg-[#080E09]/85 backdrop-blur-sm border border-white/10 text-[10px] uppercase tracking-wider font-semibold text-[#FFFC72]">
+            {item.category}
+          </span>
+
+          {/* Veg Indicator */}
+          {item.isVeg && (
+            <span
+              className="absolute top-3 left-3 w-5 h-5 rounded-sm bg-white flex items-center justify-center shadow-lg"
+              title="Vegetarian"
+            >
+              <span className="w-2.5 h-2.5 rounded-full bg-[#168B45]" />
+            </span>
+          )}
+
+          {/* Price */}
+          <div className="absolute top-3 right-3 bg-[#080E09]/90 backdrop-blur-sm border border-[#FFD900]/30 rounded-lg px-3 py-1.5">
+            <span className="text-sm font-bold font-mono text-[#FFD900]">
+              ₹{item.price}
+            </span>
+          </div>
         </div>
+
+        {/* Product Information */}
+        <div className="flex flex-col flex-1 p-4">
+
+          <div className="flex-1">
+            <h3 className="text-sm sm:text-base font-bold text-white mb-2 group-hover:text-[#FFFC72] transition-colors">
+              {item.name}
+            </h3>
+
+            <p className="text-xs text-zinc-400 leading-relaxed line-clamp-2">
+              {item.description}
+            </p>
+          </div>
+
+          {/* Quantity Controls */}
+          <div className="pt-4 mt-4 border-t border-white/10 flex items-center justify-between">
+
+            <span className="text-[10px] uppercase tracking-widest text-zinc-500 font-semibold">
+              {qty > 0 ? `${qty} in your cart` : "Add to order"}
+            </span>
+
+            {qty === 0 ? (
+              <button
+                type="button"
+                onClick={() => updateConcessionQty(item.id, 1)}
+                className="px-4 py-2 rounded-lg text-xs font-bold bg-[#101511] text-[#FFD900] border border-[#FFD900]/50 hover:bg-[#FFD900] hover:text-[#080E09] transition-all flex items-center gap-2"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add
+              </button>
+            ) : (
+              <div className="flex items-center gap-3 bg-[#101511] border border-[#FFD900]/60 rounded-lg px-3 py-2">
+
+                <button
+                  type="button"
+                  onClick={() => updateConcessionQty(item.id, -1)}
+                  className="text-zinc-300 hover:text-[#FFD900] transition-colors"
+                  aria-label={`Remove one ${item.name}`}
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+
+                <span className="text-sm font-bold font-mono text-[#FFD900] min-w-4 text-center">
+                  {qty}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => updateConcessionQty(item.id, 1)}
+                  className="text-zinc-300 hover:text-[#FFD900] transition-colors"
+                  aria-label={`Add one ${item.name}`}
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  })}
+</div>
       </div>
 
       {/* Floating Bottom Bar */}

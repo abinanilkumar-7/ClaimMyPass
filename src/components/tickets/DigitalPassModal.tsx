@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { useBooking } from '../../context/BookingContext';
 import { BookingPass } from '../../types';
+import html2canvas from "@html2canvas/html2canvas";
+import { jsPDF } from "jspdf";
 import {
   CheckCircle2,
   Download,
@@ -27,6 +29,7 @@ export const DigitalPassModal: React.FC<DigitalPassProps> = ({ passOverride, onC
   const pass = passOverride || activePass;
   const ticketRef = useRef<HTMLDivElement>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   if (!pass) return null;
 
@@ -34,38 +37,87 @@ export const DigitalPassModal: React.FC<DigitalPassProps> = ({ passOverride, onC
     window.print();
   };
 
-  const handleDownloadSimulation = () => {
-    // Generate text/pass file for user
-    const content = `================================================
-           CLAIMMYPASS DIGITAL CINEMA PASS
-================================================
-Booking ID:      ${pass.bookingId}
-Reference Hash:  ${pass.referenceHash}
-Status:          CONFIRMED & VERIFIED
-================================================
-Movie:           ${pass.movie.title}
-Certification:   ${pass.movie.certification}
-Format:          ${pass.show.format}
-Auditorium:      ${pass.show.screenName}
-Cinema:          ${pass.theatre.name}
-City:            ${pass.theatre.city.toUpperCase()}
-Date & Time:     ${pass.show.date} | ${pass.show.time}
-================================================
-Allocated Seats: ${pass.seats.map((s) => `${s.id} (${s.tier.toUpperCase()})`).join(', ')}
-Total Paid:      ₹${pass.totalPaid} (${pass.paymentMethod})
-Booked For:      ${pass.customerName}
-================================================
-Present this digital pass or QR at cinema entry.
-================================================`;
+  const handleDownloadPass = async () => {
+  const ticketElement = ticketRef.current;
 
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `ClaimMyPass_${pass.bookingId}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  if (!ticketElement || isDownloading) return;
+
+  try {
+    setIsDownloading(true);
+
+    // Wait for fonts to finish loading before capturing the ticket.
+    await document.fonts.ready;
+
+    // Capture only the ticket, not the entire application.
+    const canvas = await html2canvas(ticketElement, {
+      scale: 3,
+      useCORS: true,
+      backgroundColor: "#080E09",
+      logging: false,
+    });
+
+    if (!canvas.width || !canvas.height) {
+      throw new Error("The ticket could not be rendered.");
+    }
+
+    // Create an A4 PDF.
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: true,
+    });
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    const margin = 12;
+    const maxWidth = pageWidth - margin * 2;
+    const maxHeight = pageHeight - margin * 2;
+
+    // Preserve the ticket's original aspect ratio.
+    let renderWidth = maxWidth;
+    let renderHeight = (canvas.height * renderWidth) / canvas.width;
+
+    // Scale down when the ticket is taller than the printable area.
+    if (renderHeight > maxHeight) {
+      renderHeight = maxHeight;
+      renderWidth = (canvas.width * renderHeight) / canvas.height;
+    }
+
+    // Center the ticket on the PDF page.
+    const x = (pageWidth - renderWidth) / 2;
+    const y = (pageHeight - renderHeight) / 2;
+
+    const imageData = canvas.toDataURL("image/png");
+
+    pdf.addImage(
+      imageData,
+      "PNG",
+      x,
+      y,
+      renderWidth,
+      renderHeight,
+      undefined,
+      "FAST"
+    );
+
+    const safeBookingId = String(pass.bookingId).replace(
+      /[^a-zA-Z0-9_-]/g,
+      "_"
+    );
+
+    pdf.save(`ClaimMyPass_${safeBookingId}.pdf`);
+  } catch (error) {
+    console.error("Ticket PDF generation failed:", error);
+
+    window.alert(
+      "Unable to download the ticket PDF. Please try again."
+    );
+  } finally {
+    setIsDownloading(false);
+  }
+};
 
   return (
     <div className="w-full min-h-screen bg-[#101511] py-12 px-4 sm:px-6 lg:px-8 text-zinc-100 flex flex-col items-center">
@@ -86,7 +138,7 @@ Present this digital pass or QR at cinema entry.
       {/* Ticket Container */}
       <div
         ref={ticketRef}
-        className="relative w-full max-w-xl bg-[#080E09] border border-[#7FA35C]/40 rounded-2xl shadow-2xl overflow-hidden print:border-black print:text-black print:bg-white"
+        className="ticket-print-root relative w-full max-w-xl bg-[#080E09] border border-[#7FA35C]/40 rounded-2xl shadow-2xl overflow-hidden print:border-black print:text-black print:bg-white"
       >
         {/* Ticket Header Banner */}
         <div className="p-6 bg-gradient-to-r from-[#101511] to-[#080E09] border-b border-[#7FA35C]/20 flex items-center justify-between">
@@ -211,9 +263,8 @@ Present this digital pass or QR at cinema entry.
           {/* Dynamic Branded Ticket QR Code */}
           <div className="sm:col-span-5 flex flex-col items-center justify-center">
             <TicketQRCode
-              bookingReference={pass.referenceHash}
+              token={pass.qrToken}
               bookingId={pass.bookingId}
-              movieTitle={pass.movie.title}
               size={140}
               showBranding={true}
             />
@@ -224,7 +275,7 @@ Present this digital pass or QR at cinema entry.
         <div className="bg-[#101511] px-6 py-3 border-t border-white/5 flex items-center justify-between text-[11px] text-zinc-400">
           <span className="flex items-center gap-1.5 text-[#648E37]">
             <ShieldCheck className="w-3.5 h-3.5" />
-            Cryptographic SHA-256 Verified
+            Server Signed Ticket
           </span>
           <span>ClaimMyPass Ticketing</span>
         </div>
@@ -243,7 +294,8 @@ Present this digital pass or QR at cinema entry.
           </button>
 
           <button
-            onClick={handleDownloadSimulation}
+            onClick={handleDownloadPass}
+            disabled={isDownloading}
             className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold bg-[#080E09] text-zinc-200 border border-[#7FA35C]/40 hover:border-[#FFD900] transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-[#FFD900]" />

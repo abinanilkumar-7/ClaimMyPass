@@ -2,6 +2,7 @@ import React from 'react';
 import { Movie } from '../../types';
 import { useBooking } from '../../context/BookingContext';
 import { Star, Clock } from 'lucide-react';
+import SafeImage from '../common/SafeImage';
 
 interface MovieCardProps {
   movie: Movie;
@@ -20,7 +21,8 @@ export const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
           setIsMovieDetailOpen(true);
         }}
       >
-        <img
+
+        <SafeImage
           src={movie.posterUrl}
           alt={movie.title}
           referrerPolicy="no-referrer"
@@ -96,7 +98,10 @@ export const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
           </button>
 
           <button
-            onClick={() => startSeatBooking(movie)}
+            onClick={() => {
+              setSelectedMovie(movie);
+              setIsMovieDetailOpen(true);
+            }}
             className="px-3.5 py-1.5 rounded-md text-xs font-bold bg-[#FFD900] text-[#080E09] hover:bg-[#FFFC72] shadow-sm transition-all"
           >
             Book Tickets

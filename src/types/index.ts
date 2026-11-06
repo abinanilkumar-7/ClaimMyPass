@@ -4,6 +4,7 @@ export type SeatStatus = 'available' | 'selected' | 'held' | 'booked';
 
 export interface Seat {
   id: string;
+  backendId?: number;
   row: string;
   number: number;
   tier: SeatTier;
@@ -29,6 +30,7 @@ export interface Movie {
   posterUrl: string;
   backdropUrl: string;
   trendingRank?: number;
+  isFeatured?: boolean;
 }
 
 export interface Theatre {
@@ -69,6 +71,7 @@ export interface ConcessionItem {
 
 export interface BookingPass {
   bookingId: string;
+  qrToken?: string;
   referenceHash: string;
   movie: Movie;
   theatre: Theatre;

@@ -1,8 +1,38 @@
+# Frontend dependencies and build output
 node_modules/
-build/
 dist/
+build/
 coverage/
-.DS_Store
-*.log
-.env*
+
+# Python environments
+.venv/
+venv/
+**/.venv/
+**/venv/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Local databases
+db.sqlite3
+*.sqlite3
+*.db
+
+# Django generated files
+staticfiles/
+media/
+
+# Environment variables and secrets
+.env
+.env.*
 !.env.example
+
+# Vercel
+.vercel/
+
+# Logs and operating-system files
+*.log
+.DS_Store
+Thumbs.db
